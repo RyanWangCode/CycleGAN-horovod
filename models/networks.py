@@ -110,8 +110,8 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     """
     if len(gpu_ids) > 0:
         assert(torch.cuda.is_available())
-        net.to(gpu_ids[0])
-        net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
+        # net.to(gpu_ids[0])
+        # net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
     init_weights(net, init_type, init_gain=init_gain)
     return net
 
@@ -284,7 +284,7 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
         fake_data (tensor array)    -- generated images from the generator
         device (str)                -- GPU / CPU: from torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
         type (str)                  -- if we mix real and fake data or not [real | fake | mixed].
-        constant (float)            -- the constant used in formula ( ||gradient||_2 - constant)^2
+        constant (float)            -- the constant used in formula ( | |gradient||_2 - constant)^2
         lambda_gp (float)           -- weight for this loss
 
     Returns the gradient penalty loss

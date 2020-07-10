@@ -4,7 +4,7 @@ from util import util
 import torch
 import models
 import data
-
+import horovod.torch as hvd
 
 class BaseOptions():
     """This class defines options used during both training and test time.
@@ -129,8 +129,9 @@ class BaseOptions():
             id = int(str_id)
             if id >= 0:
                 opt.gpu_ids.append(id)
-        if len(opt.gpu_ids) > 0:
-            torch.cuda.set_device(opt.gpu_ids[0])
+        # if len(opt.gpu_ids) > 0:
+        #     torch.cuda.set_device(opt.gpu_ids[0])
+        torch.cuda.set_device(hvd.local_rank())
 
         self.opt = opt
         return self.opt

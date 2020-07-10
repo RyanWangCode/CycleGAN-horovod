@@ -3,6 +3,7 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+import horovod.torch as hvd
 
 
 class CycleGANModel(BaseModel):
@@ -87,12 +88,19 @@ class CycleGANModel(BaseModel):
             self.fake_A_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             self.fake_B_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             # define loss functions
-            self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
+            # self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
+            self.criterionGAN = networks.GANLoss(opt.gan_mode).cuda()
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_G = hvd.DistributedOptimizer(self.optimizer_G,
+                                                        named_parameters=itertools.chain(self.netG_A.name_parameters(prefix='netG_A'), self.netG_B.name_parameters(prefix='netG_B')),
+                                                        op=hvd.Average)
+            self.optimizer_D = hvd.DistributedOptimizer(self.optimizer_D,
+                                                        named_parameters=itertools.chain(self.netD_A.name_parameters(prefix='netD_A'), self.netD_B.name_parameters(prefix='netD_B')),
+                                                        op=hvd.Average)
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
@@ -105,8 +113,10 @@ class CycleGANModel(BaseModel):
         The option 'direction' can be used to swap domain A and domain B.
         """
         AtoB = self.opt.direction == 'AtoB'
-        self.real_A = input['A' if AtoB else 'B'].to(self.device)
-        self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        # self.real_A = input['A' if AtoB else 'B'].to(self.device)
+        # self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        self.real_A = input['A' if AtoB else 'B'].cuda()
+        self.real_B = input['B' if AtoB else 'A'].cuda()
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):

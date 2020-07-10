@@ -3,6 +3,7 @@ import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
 from . import networks
+import horovod.torch as hvd
 
 
 class BaseModel(ABC):
@@ -153,8 +154,9 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
 
                 if len(self.gpu_ids) > 0 and torch.cuda.is_available():
-                    torch.save(net.module.cpu().state_dict(), save_path)
-                    net.cuda(self.gpu_ids[0])
+                    torch.save(net.cpu().state_dict(), save_path)
+                    # net.cuda(self.gpu_ids[0])
+                    net.cuda()
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
 
@@ -178,24 +180,27 @@ class BaseModel(ABC):
         Parameters:
             epoch (int) -- current epoch; used in the file name '%s_net_%s.pth' % (epoch, name)
         """
-        for name in self.model_names:
-            if isinstance(name, str):
-                load_filename = '%s_net_%s.pth' % (epoch, name)
-                load_path = os.path.join(self.save_dir, load_filename)
-                net = getattr(self, 'net' + name)
-                if isinstance(net, torch.nn.DataParallel):
-                    net = net.module
-                print('loading the model from %s' % load_path)
-                # if you are using PyTorch newer than 0.4 (e.g., built from
-                # GitHub source), you can remove str() on self.device
-                state_dict = torch.load(load_path, map_location=str(self.device))
-                if hasattr(state_dict, '_metadata'):
-                    del state_dict._metadata
+        if hvd.rank() == 0:
+            for name in self.model_names:
+                if isinstance(name, str):
+                    load_filename = '%s_net_%s.pth' % (epoch, name)
+                    load_path = os.path.join(self.save_dir, load_filename)
+                    net = getattr(self, 'net' + name)
+                    if isinstance(net, torch.nn.DataParallel):
+                        net = net.module
+                    print('loading the model from %s' % load_path)
+                    # if you are using PyTorch newer than 0.4 (e.g., built from
+                    # GitHub source), you can remove str() on self.device
 
-                # patch InstanceNorm checkpoints prior to 0.4
-                for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
-                    self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
-                net.load_state_dict(state_dict)
+                    # state_dict = torch.load(load_path, map_location=str(self.device))
+                    state_dict = torch.load(load_path)
+                    if hasattr(state_dict, '_metadata'):
+                        del state_dict._metadata
+
+                    # patch InstanceNorm checkpoints prior to 0.4
+                    for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
+                        self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
+                    net.load_state_dict(state_dict)
 
     def print_networks(self, verbose):
         """Print the total number of parameters in the network and (if verbose) network architecture
